@@ -412,7 +412,7 @@ OpenClaw 为 browser、canvas、nodes 和 cron 暴露**一流的智能体工具*
 注意：
 
 - `add` 期望完整的定时任务对象（与 `cron.add` RPC 相同的 schema）。
-- `update` 使用 `{ jobId, patch }`（`id` 可作为兼容别名）。
+- `update` 使用 `{ id, patch }`。
 
 ### `gateway`
 
