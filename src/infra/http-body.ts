@@ -60,6 +60,24 @@ export function requestBodyErrorToText(code: RequestBodyLimitErrorCode): string 
   return DEFAULT_RESPONSE_MESSAGE[code];
 }
 
+function safeDestroyRequest(req: IncomingMessage, error: Error) {
+  if (req.destroyed) {
+    return;
+  }
+  // Some tests stub IncomingMessage-like objects without a real `.destroy()` implementation.
+  const maybe = req as unknown as {
+    destroy?: (error?: Error) => void;
+    socket?: { destroy?: (error?: Error) => void };
+  };
+  if (typeof maybe.destroy === "function") {
+    maybe.destroy(error);
+    return;
+  }
+  if (typeof maybe.socket?.destroy === "function") {
+    maybe.socket.destroy(error);
+  }
+}
+
 function parseContentLengthHeader(req: IncomingMessage): number | null {
   const header = req.headers["content-length"];
   const raw = Array.isArray(header) ? header[0] : header;
@@ -95,9 +113,7 @@ export async function readRequestBodyWithLimit(
   const declaredLength = parseContentLengthHeader(req);
   if (declaredLength !== null && declaredLength > maxBytes) {
     const error = new RequestBodyLimitError({ code: "PAYLOAD_TOO_LARGE" });
-    if (!req.destroyed) {
-      req.destroy(error);
-    }
+    safeDestroyRequest(req, error);
     throw error;
   }
 
@@ -130,9 +146,7 @@ export async function readRequestBodyWithLimit(
 
     const timer = setTimeout(() => {
       const error = new RequestBodyLimitError({ code: "REQUEST_BODY_TIMEOUT" });
-      if (!req.destroyed) {
-        req.destroy(error);
-      }
+      safeDestroyRequest(req, error);
       fail(error);
     }, timeoutMs);
 
@@ -144,9 +158,7 @@ export async function readRequestBodyWithLimit(
       totalBytes += buffer.length;
       if (totalBytes > maxBytes) {
         const error = new RequestBodyLimitError({ code: "PAYLOAD_TOO_LARGE" });
-        if (!req.destroyed) {
-          req.destroy(error);
-        }
+        safeDestroyRequest(req, error);
         fail(error);
         return;
       }
@@ -293,9 +305,7 @@ export function installRequestBodyLimitGuard(
     reason = error.code;
     finish();
     respond(error);
-    if (!req.destroyed) {
-      req.destroy(error);
-    }
+    safeDestroyRequest(req, error);
   };
 
   const onData = (chunk: Buffer | string) => {
